@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#0b1320" />
+<title>Turbo Golf — Speed Run</title>
+<style>
+  :root{
+    --ink:#f4f7fb; --muted:#9eb0c6; --panel:#121d2d; --line:#26364b;
+    --accent:#7cf2a3; --warn:#ffd166; --danger:#ff6b7a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:#08111d;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100%;overflow:hidden}
+  body{display:flex;justify-content:center}
+  #app{width:min(100vw,560px);height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,#0b1422,#07101a)}
+  header{padding:calc(env(safe-area-inset-top) + 10px) 14px 8px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+  .brand{font-weight:900;letter-spacing:.08em;font-size:13px;text-transform:uppercase;color:var(--accent)}
+  .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .timer{font-variant-numeric:tabular-nums;font-size:26px;font-weight:900;line-height:1}
+  #hud{padding:0 14px 8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .chip{background:#101b2a;border:1px solid var(--line);border-radius:12px;padding:7px 8px;text-align:center}
+  .chip b{display:block;font-size:14px}
+  .chip span{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+  #wrap{position:relative;flex:1;min-height:0;padding:0 10px 10px}
+  canvas{width:100%;height:100%;display:block;border-radius:22px;border:1px solid var(--line);background:#173a2b;touch-action:none;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  #message{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(7,16,26,.82);border:1px solid #31435a;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800;white-space:nowrap;opacity:0;pointer-events:none;transition:.18s}
+  #message.show{opacity:1}
+  #power{position:absolute;right:18px;bottom:22px;width:18px;height:150px;border:1px solid #42546b;border-radius:12px;background:#0d1724;overflow:hidden;display:none}
+  #powerFill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,#ffef7a,#7cf2a3,#69b7ff);transition:none}
+  #hint{position:absolute;left:20px;bottom:21px;background:rgba(7,16,26,.75);border:1px solid #31435a;border-radius:12px;padding:8px 10px;font-size:10px;color:#dfe8f3;max-width:210px}
+  #overlay{position:absolute;inset:0;background:rgba(4,9,15,.86);display:flex;align-items:center;justify-content:center;padding:24px;z-index:5}
+  .card{width:min(100%,420px);background:linear-gradient(180deg,#142237,#0e1827);border:1px solid #31435a;border-radius:24px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+  .title{font-size:38px;line-height:.95;font-weight:1000;letter-spacing:-.04em;margin:0 0 8px}
+  .tag{color:var(--accent);font-weight:900;letter-spacing:.1em;text-transform:uppercase;font-size:11px}
+  .copy{color:#b9c6d6;line-height:1.45;font-size:14px}
+  button{width:100%;border:0;border-radius:14px;padding:14px 16px;background:var(--accent);color:#07110b;font-weight:950;font-size:16px;margin-top:12px;cursor:pointer}
+  button.alt{background:#1d2b3d;color:#eaf2fb;border:1px solid #34465d}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .stat{background:#0a1320;border:1px solid #24344a;border-radius:14px;padding:12px}
+  .stat small{color:#8699b0;text-transform:uppercase;font-size:9px;letter-spacing:.08em}
+  .stat div{font-size:22px;font-weight:950;margin-top:2px}
+  .legal{font-size:9px;color:#667990;margin-top:14px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <div class="brand">TURBO GOLF</div>
+      <div class="sub" id="courseLabel">Nine holes. One breath.</div>
+    </div>
+    <div class="timer" id="timer">45.0</div>
+  </header>
+
+  <div id="hud">
+    <div class="chip"><b id="hole">1/9</b><span>hole</span></div>
+    <div class="chip"><b id="strokes">0</b><span>strokes</span></div>
+    <div class="chip"><b id="score">0</b><span>score</span></div>
+    <div class="chip"><b id="combo">x1</b><span>combo</span></div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="game"></canvas>
+    <div id="message"></div>
+    <div id="power"><div id="powerFill"></div></div>
+    <div id="hint">Drag back from the ball, release to fire. Pocket hazards cost time.</div>
+
+    <div id="overlay">
+      <div class="card" id="card">
+        <div class="tag">speed-run mini golf</div>
+        <h1 class="title">Turbo Golf</h1>
+        <p class="copy">Sink all 9 holes as fast as you can. Build a combo by holing out quickly and cleanly. Wind shifts every hole. The clock starts at 0.0 on your first shot and stops when the ball drops on hole 9.</p>
+        <div class="stats">
+          <div class="stat"><small>best time</small><div id="best">—</div></div>
+          <div class="stat"><small>best score</small><div id="bestScore">—</div></div>
+        </div>
+        <button id="start">TEE OFF</button>
+        <button class="alt" id="how">HOW TO PLAY</button>
+        <div class="legal">Designed for portrait mode • works offline once saved to your phone</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+  const timerEl = document.getElementById('timer'), holeEl=document.getElementById('hole');
+  const strokesEl=document.getElementById('strokes'), scoreEl=document.getElementById('score'), comboEl=document.getElementById('combo');
+  const msg=document.getElementById('message'), overlay=document.getElementById('overlay'), card=document.getElementById('card');
+  const power=document.getElementById('power'), powerFill=document.getElementById('powerFill'), hint=document.getElementById('hint');
+  const bestEl=document.getElementById('best'), bestScoreEl=document.getElementById('bestScore');
+
+  const COURSE = [
+    {par:2, p:[.16,.76], h:[.80,.22], hazards:[{x:.50,y:.47,r:.055}]},
+    {par:2, p:[.18,.22], h:[.82,.77], hazards:[{x:.52,y:.50,r:.06},{x:.34,y:.62,r:.035}]},
+    {par:3, p:[.15,.68], h:[.84,.34], hazards:[{x:.50,y:.33,r:.07},{x:.60,y:.68,r:.05}]},
+    {par:2, p:[.80,.78], h:[.18,.22], hazards:[{x:.52,y:.54,r:.07}]},
+    {par:3, p:[.16,.24], h:[.86,.80], hazards:[{x:.36,y:.47,r:.045},{x:.64,y:.54,r:.045},{x:.52,y:.73,r:.035}]},
+    {par:2, p:[.18,.76], h:[.82,.24], hazards:[{x:.50,y:.50,r:.08}]},
+    {par:3, p:[.83,.72], h:[.22,.28], hazards:[{x:.50,y:.30,r:.045},{x:.55,y:.63,r:.075}]},
+    {par:2, p:[.16,.30], h:[.83,.68], hazards:[{x:.52,y:.50,r:.06},{x:.30,y:.52,r:.03}]},
+    {par:3, p:[.15,.75], h:[.84,.24], hazards:[{x:.34,y:.38,r:.05},{x:.66,y:.54,r:.06},{x:.49,y:.74,r:.03}]}
+  ];
+
+  let W=1,H=1,dpr=1, course=0, ball, hole, strokes=0, totalScore=0, combo=1;
+  let elapsedTime=0, timerStarted=false, timerStopped=false, running=false, moving=false, dragging=false, dragStart=null, dragNow=null, last=0;
+  let vx=0,vy=0, wind={x:0,y:0}, trail=[], particles=[], bestTime=localStorage.tgBestTime||'', bestScore=localStorage.tgBestScore||'';
+
+  bestEl.textContent=bestTime?Number(bestTime).toFixed(1)+'s':'—';
+  bestScoreEl.textContent=bestScore||'—';
+
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function resize(){
+    const r=canvas.getBoundingClientRect(); dpr=Math.min(devicePixelRatio||1,2);
+    W=r.width; H=r.height; canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(ball) setBallPixels();
+  }
+  new ResizeObserver(resize).observe(canvas);
+
+  function setBallPixels(){
+    ball.x=courseData().p[0]*W; ball.y=courseData().p[1]*H;
+  }
+  function P(q){return {x:q[0]*W,y:q[1]*H}}
+  function courseData(){return COURSE[course]}
+  function newHole(){
+    const c=courseData(), p=P(c.p), h=P(c.h);
+    ball={x:p.x,y:p.y,r:Math.max(7,Math.min(W,H)*.022)};
+    hole=h; strokes=0; moving=false; dragging=false; trail=[]; particles=[];
+    wind={x:(Math.random()*2-1)*.23,y:(Math.random()*2-1)*.16};
+    holeEl.textContent=(course+1)+'/9'; strokesEl.textContent='0';
+    hint.textContent='Drag back from the ball, release to fire.';
+    showMsg(course===0?'GO!':`HOLE ${course+1}`);
+  }
+
+  function startGame(){
+    overlay.style.display='none'; course=0; elapsedTime=0; timerStarted=false; timerStopped=false; totalScore=0; combo=1; running=true; timerEl.textContent='0.0';
+    newHole(); last=performance.now(); hint.style.display='block'; requestAnimationFrame(loop);
+  }
+
+  function endGame(reason){
+    running=false; moving=false; dragging=false; power.style.display='none';
+    const elapsed=elapsedTime;
+    const won=course>=9;
+    if(won){
+      if(!bestTime || elapsed<Number(bestTime)) { localStorage.tgBestTime=elapsed.toFixed(1); bestTime=localStorage.tgBestTime; }
+      if(!bestScore || totalScore>Number(bestScore)) { localStorage.tgBestScore=String(totalScore); bestScore=localStorage.tgBestScore; }
+    }
+    bestEl.textContent=bestTime?Number(bestTime).toFixed(1)+'s':'—';
+    bestScoreEl.textContent=bestScore||'—';
+    card.innerHTML = won
+      ? `<div class="tag">course cleared</div><h1 class="title">${elapsed.toFixed(1)}s</h1><p class="copy">You cleared all nine holes with a final score of <b>${totalScore}</b>. ${combo>=4?'Absolute rocket.':''}</p>
+         <div class="stats"><div class="stat"><small>strokes</small><div>${sumStrokes}</div></div><div class="stat"><small>best combo</small><div>x${maxCombo}</div></div></div>
+         <button id="start">RUN IT BACK</button><button class="alt" id="share">SHARE SCORE</button>`
+      : `<div class="tag">run ended</div><h1 class="title">${elapsedTime.toFixed(1)}s</h1><p class="copy">The run ended on hole <b>${course+1}</b> with <b>${totalScore}</b> points.</p>
+         <button id="start">TRY AGAIN</button><button class="alt" id="share">SHARE SCORE</button>`;
+    overlay.style.display='flex';
+    document.getElementById('start').onclick=startGame;
+    const sh=document.getElementById('share');
+    sh.onclick=async()=>{const text=`Turbo Golf: ${totalScore} points — hole ${Math.min(course+1,9)}/9`; try{await navigator.clipboard.writeText(text);showMsg('SCORE COPIED');}catch(e){showMsg(text)}} 
+  }
+
+  let sumStrokes=0,maxCombo=1;
+
+  function showMsg(t){
+    msg.textContent=t; msg.classList.add('show'); clearTimeout(showMsg.t); showMsg.t=setTimeout(()=>msg.classList.remove('show'),750);
+  }
+
+  function pointerPos(e){
+    const r=canvas.getBoundingClientRect();
+    return {x:e.clientX-r.left,y:e.clientY-r.top};
+  }
+
+  canvas.addEventListener('pointerdown', e=>{
+    if(!running || moving) return;
+    const p=pointerPos(e); const d=Math.hypot(p.x-ball.x,p.y-ball.y);
+    if(d<ball.r*3.2){ dragging=true; dragStart={x:ball.x,y:ball.y}; dragNow=p; power.style.display='block'; canvas.setPointerCapture(e.pointerId); hint.style.display='none';}
+  });
+  canvas.addEventListener('pointermove', e=>{if(dragging) dragNow=pointerPos(e)});
+  canvas.addEventListener('pointerup', e=>{
+    if(!dragging)return; dragNow=pointerPos(e); const dx=dragStart.x-dragNow.x, dy=dragStart.y-dragNow.y;
+    const mag=Math.hypot(dx,dy); if(mag>8){
+      const speed=clamp(mag*.055,0.7,5.3);
+      vx=dx/mag*speed; vy=dy/mag*speed; moving=true;
+      if(!timerStarted){timerStarted=true; elapsedTime=0; timerEl.textContent='0.0';}
+      strokes++; sumStrokes++; trail=[]; power.style.display='none'; strokesEl.textContent=strokes; showMsg('NICE LINE');
+    }
+    dragging=false; dragStart=null; dragNow=null;
+  });
+
+  function distSeg(px,py,x1,y1,x2,y2){
+    const dx=x2-x1,dy=y2-y1; const l=dx*dx+dy*dy;
+    if(!l)return Math.hypot(px-x1,py-y1);
+    let t=((px-x1)*dx+(py-y1)*dy)/l; t=clamp(t,0,1);
+    return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));
+  }
+
+  function tick(dt){
+    if(!running)return;
+    if(timerStarted && !timerStopped){
+      elapsedTime += dt;
+      timerEl.textContent=elapsedTime.toFixed(1);
+    }
+    if(moving){
+      // subtle acceleration from wind
+      vx += wind.x*dt*.24; vy += wind.y*dt*.24;
+      const speed=Math.hypot(vx,vy); const friction=Math.pow(.90,dt*60);
+      ball.x += vx*dt*60; ball.y += vy*dt*60;
+      vx*=friction; vy*=friction;
+      trail.push({x:ball.x,y:ball.y,a:1}); if(trail.length>22)trail.shift();
+      trail.forEach(t=>t.a*=.94);
+      // cushions
+      if(ball.x<ball.r){ball.x=ball.r;vx=Math.abs(vx)*.82}
+      if(ball.x>W-ball.r){ball.x=W-ball.r;vx=-Math.abs(vx)*.82}
+      if(ball.y<ball.r){ball.y=ball.r;vy=Math.abs(vy)*.82}
+      if(ball.y>H-ball.r){ball.y=H-ball.r;vy=-Math.abs(vy)*.82}
+      // hazards
+      for(const z of courseData().hazards){const zz=P([z.x,z.y]); if(Math.hypot(ball.x-zz.x,ball.y-zz.y)<z.r*Math.min(W,H)){elapsedTime+=2.3; combo=1; showMsg('SPLASH!  +2.3s'); particles.push({x:ball.x,y:ball.y,t:1,type:'splash'}); ball.x=P(courseData().p).x; ball.y=P(courseData().p).y; vx=vy=0;moving=false; break}}
+      // slow to rest
+      if(Math.hypot(vx,vy)<.16){vx=vy=0;moving=false;}
+      // hole
+      const d=Math.hypot(ball.x-hole.x,ball.y-hole.y);
+      if(d<Math.max(11,Math.min(W,H)*.028) && (Math.abs(vx)+Math.abs(vy)<1.2)){
+        moving=false; ball.x=hole.x; ball.y=hole.y;
+        if(course===8){timerStopped=true; timerEl.textContent=elapsedTime.toFixed(1);}
+        const bonus=Math.max(0, Math.round((courseData().par+2-strokes)*6));
+        const speedBonus=Math.round(Math.max(0,Math.min(18,18-elapsedTime*.55)));
+        const pts=Math.max(5, 24-bonus+speedBonus)*combo;
+        totalScore+=pts; combo++; maxCombo=Math.max(maxCombo,combo); comboEl.textContent='x'+combo; scoreEl.textContent=totalScore;
+        particles.push({x:hole.x,y:hole.y,t:1,type:'cup'}); showMsg(`BIRDIE! +${pts}`);
+        setTimeout(()=>{if(!running)return; course++; if(course>=9){endGame('win')} else newHole()},420);
+      }
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const c=courseData();
+    // fairway base
+    ctx.fillStyle='#1a5638'; ctx.fillRect(0,0,W,H);
+    // stripes
+    for(let i=0;i<10;i++){ctx.fillStyle=i%2?'rgba(255,255,255,.018)':'rgba(0,0,0,.018)';ctx.fillRect(i*W/10,0,W/10,H)}
+    // decorative rough blobs
+    ctx.strokeStyle='rgba(255,255,255,.045)';ctx.lineWidth=2;
+    for(let i=0;i<22;i++){ctx.beginPath();ctx.arc((i*79%W), (i*53%H), 5+(i%4)*3,0,Math.PI*2);ctx.stroke()}
+    // hazards
+    for(const z of c.hazards){const q=P([z.x,z.y]),r=z.r*Math.min(W,H);
+      ctx.fillStyle='#10262c';ctx.beginPath();ctx.arc(q.x,q.y,r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#2a7880';ctx.lineWidth=2;ctx.beginPath();ctx.arc(q.x,q.y,r-2,0,Math.PI*2);ctx.stroke();
+      for(let a=0;a<Math.PI*2;a+=Math.PI/3){ctx.strokeStyle='rgba(124,242,163,.22)';ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x+Math.cos(a)*r,q.y+Math.sin(a)*r);ctx.stroke()}
+    }
+    // hole
+    ctx.fillStyle='#09151b';ctx.beginPath();ctx.arc(hole.x,hole.y,Math.max(10,Math.min(W,H)*.032),0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#ecf4ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(hole.x,hole.y,Math.max(10,Math.min(W,H)*.032),0,Math.PI*2);ctx.stroke();
+    // flag
+    ctx.strokeStyle='#dbe7f4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(hole.x,hole.y);ctx.lineTo(hole.x,hole.y-34);ctx.stroke();
+    ctx.fillStyle='#ff6b7a';ctx.beginPath();ctx.moveTo(hole.x,hole.y-34);ctx.lineTo(hole.x+19,hole.y-29);ctx.lineTo(hole.x,hole.y-22);ctx.closePath();ctx.fill();
+
+    // wind
+    const wcx=62,wcy=58,len=26,ang=Math.atan2(wind.y,wind.x);
+    ctx.save();ctx.translate(wcx,wcy);ctx.rotate(ang);ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(-len/2,0);ctx.lineTo(len/2,0);ctx.moveTo(len/2,0);ctx.lineTo(len/2-7,-5);ctx.moveTo(len/2,0);ctx.lineTo(len/2-7,5);ctx.stroke();ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,.65)';ctx.font='700 10px system-ui';ctx.fillText('WIND',44,79);
+
+    // aim guide
+    if(dragging && dragNow){
+      const dx=ball.x-dragNow.x,dy=ball.y-dragNow.y,mag=Math.hypot(dx,dy);
+      ctx.strokeStyle='rgba(124,242,163,.8)';ctx.lineWidth=3;ctx.setLineDash([7,7]);ctx.beginPath();ctx.moveTo(ball.x,ball.y);ctx.lineTo(ball.x+dx*.85,ball.y+dy*.85);ctx.stroke();ctx.setLineDash([]);
+      const pct=clamp(mag/140,0,1); powerFill.style.height=(pct*100)+'%';
+      // ghost landing dot
+      ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.arc(ball.x+dx*.85,ball.y+dy*.85,4,0,Math.PI*2);ctx.fill();
+    }
+    // trail
+    for(const t of trail){ctx.fillStyle=`rgba(255,255,255,${t.a*.18})`;ctx.beginPath();ctx.arc(t.x,t.y,ball.r*.55,0,Math.PI*2);ctx.fill()}
+    // ball shadow
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(ball.x+2,ball.y+3,ball.r*1.05,ball.r*.72,0,0,Math.PI*2);ctx.fill();
+    // ball
+    ctx.fillStyle='#f4f7fb';ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#c7d3e0';ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle='rgba(20,35,45,.16)';for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(ball.x-3+i*2,ball.y-2+(i%2)*3,1,0,Math.PI*2);ctx.fill()}
+    // particles
+    for(const p of particles){p.t-=.02; if(p.t<0)continue;ctx.strokeStyle=`rgba(255,255,255,${p.t})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,(1-p.t)*38,0,Math.PI*2);ctx.stroke()}
+    particles=particles.filter(p=>p.t>0);
+
+    // lower instruction once per hole
+    ctx.fillStyle='rgba(4,10,15,.35)';ctx.fillRect(0,H-32,W,32);
+    ctx.fillStyle='rgba(255,255,255,.7)';ctx.font='800 10px system-ui';ctx.textAlign='center';
+    ctx.fillText('SWIPE • BANK IT • SINK IT',W/2,H-12);ctx.textAlign='start';
+  }
+
+  function loop(now){
+    const dt=Math.min(.033,(now-last)/1000||0);last=now;
+    tick(dt);draw();
+    if(running) requestAnimationFrame(loop);
+  }
+
+  document.getElementById('start').onclick=startGame;
+  document.getElementById('how').onclick=()=>{
+    alert('HOW TO PLAY\\n\\n1. Put your finger on the ball.\\n2. Drag backward to aim and choose power.\\n3. Release to shoot.\\n4. Sink all 9 holes as fast as possible. The clock starts on your first shot and stops when the ball goes in on hole 9.\\n\\nGreen speed = bigger combo. Hazards add 2.3 seconds and break your combo. The wind changes every hole.');
+  };
+  resize();
+  draw();
+})();
+</script>
+</body>
+</html>
