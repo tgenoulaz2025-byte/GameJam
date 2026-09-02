@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Speed Golf Dash</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      background: #111;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+      max-height: 800px;
+      background: #87CEEB;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #ui-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      z-index: 10;
+      font-weight: bold;
+      font-size: 18px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+      z-index: 10;
+      padding: 0 20px;
+    }
+    .btn {
+      background: #ff4757;
+      color: white;
+      border: none;
+      padding: 16px 28px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 50px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+      display: none;
+    }
+    .btn:active {
+      transform: scale(0.95);
+      background: #ff6b81;
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      text-align: center;
+      padding: 20px;
+    }
+    #overlay h1 {
+      font-size: 32px;
+      color: #2ed573;
+      margin-bottom: 10px;
+    }
+    #overlay p {
+      font-size: 16px;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+    #start-btn {
+      background: #2ed573;
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      font-size: 20px;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="ui-bar">
+    <div>Time: <span id="timer-val">30</span>s</div>
+    <div>Strokes: <span id="strokes-val">0</span></div>
+    <div>Score: <span id="score-val">0</span></div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="controls">
+    <button class="btn" id="sprint-btn">SPRINT &gt;&gt;</button>
+  </div>
+
+  <div id="overlay">
+    <h1 id="overlay-title">SPEED GOLF DASH</h1>
+    <p id="overlay-desc">Drag back and release on the screen to aim and swing.<br><br>Once the ball lands, hit <b>SPRINT</b> to run to it. Hole out before time runs out!</p>
+    <button id="start-btn">PLAY</button>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const timerVal = document.getElementById('timer-val');
+  const strokesVal = document.getElementById('strokes-val');
+  const scoreVal = document.getElementById('score-val');
+  const sprintBtn = document.getElementById('sprint-btn');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlay-title');
+  const overlayDesc = document.getElementById('overlay-desc');
+  const startBtn = document.getElementById('start-btn');
+
+  let width, height;
+  function resizeCanvas() {
+    width = canvas.width = canvas.clientWidth;
+    height = canvas.height = canvas.clientHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // Game States: AIMING, BALL_IN_AIR, SPRINTING, HOLE_COMPLETE, GAME_OVER
+  let gameState = 'AIMING';
+  let score = 0;
+  let strokes = 0;
+  let timeLeft = 30;
+  let timerInterval = null;
+
+  // World Elements
+  const worldLength = 2500;
+  let cameraX = 0;
+
+  let player = { x: 50, y: 0, vx: 0, speed: 6 };
+  let ball = { x: 50, y: 0, vx: 0, vy: 0, radius: 5, active: false };
+  let flag = { x: 2200, y: 0 };
+  let dragStart = null;
+  let currentDrag = null;
+
+  const groundY = height - 100;
+
+  function initLevel() {
+    strokes = 0;
+    timeLeft = 30;
+    strokesVal.textContent = strokes;
+    timerVal.textContent = timeLeft;
+
+    player.x = 50;
+    player.vx = 0;
+    ball.x = 50;
+    ball.y = groundY - 5;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.active = false;
+
+    gameState = 'AIMING';
+    sprintBtn.style.display = 'none';
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      if (gameState !== 'HOLE_COMPLETE' && gameState !== 'GAME_OVER') {
+        timeLeft--;
+        timerVal.textContent = timeLeft;
+        if (timeLeft <= 0) {
+          endGame(false);
+        }
+      }
+    }, 1000);
+  }
+
+  // Input Handling
+  canvas.addEventListener('pointerdown', (e) => {
+    if (gameState !== 'AIMING') return;
+    const rect = canvas.getBoundingClientRect();
+    dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragStart || gameState !== 'AIMING') return;
+    const rect = canvas.getBoundingClientRect();
+    currentDrag = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    if (dragStart && currentDrag && gameState === 'AIMING') {
+      const dx = dragStart.x - currentDrag.x;
+      const dy = dragStart.y - currentDrag.y;
+      
+      if (dx > 10) { // Shot triggered
+        ball.vx = dx * 0.12;
+        ball.vy = dy * 0.12;
+        ball.active = true;
+        strokes++;
+        strokesVal.textContent = strokes;
+        gameState = 'BALL_IN_AIR';
+      }
+    }
+    dragStart = null;
+    currentDrag = null;
+  });
+
+  sprintBtn.addEventListener('click', () => {
+    if (gameState === 'SPRINTING') {
+      player.vx = player.speed;
+    }
+  });
+
+  startBtn.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    if (gameState === 'GAME_OVER' || gameState === 'HOLE_COMPLETE') {
+      if (gameState === 'GAME_OVER') score = 0;
+      scoreVal.textContent = score;
+    }
+    initLevel();
+  });
+
+  function update() {
+    // Ball Physics
+    if (ball.active) {
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+      ball.vy += 0.35; // Gravity
+
+      // Ground collision
+      if (ball.y >= groundY - ball.radius) {
+        ball.y = groundY - ball.radius;
+        ball.vx *= 0.6; // Friction
+        ball.vy *= -0.4; // Bounce
+
+        if (Math.abs(ball.vx) < 0.2 && Math.abs(ball.vy) < 0.5) {
+          ball.vx = 0;
+          ball.vy = 0;
+          ball.active = false;
+          
+          // Check if landed near flag
+          if (Math.abs(ball.x - flag.x) < 20) {
+            holeIn();
+          } else {
+            gameState = 'SPRINTING';
+            sprintBtn.style.display = 'block';
+          }
+        }
+      }
+    }
+
+    // Player Sprinting Mechanics
+    if (gameState === 'SPRINTING') {
+      player.x += player.vx;
+      player.vx *= 0.9; // Friction
+
+      // Check if player reached the ball
+      if (player.x >= ball.x - 10) {
+        player.x = ball.x - 10;
+        player.vx = 0;
+        gameState = 'AIMING';
+        sprintBtn.style.display = 'none';
+      }
+    }
+
+    // Camera following priority
+    let targetX = (gameState === 'BALL_IN_AIR') ? ball.x : player.x;
+    cameraX += (targetX - cameraX - width / 3) * 0.1;
+    cameraX = Math.max(0, Math.min(cameraX, worldLength - width));
+  }
+
+  function holeIn() {
+    clearInterval(timerInterval);
+    const timeBonus = timeLeft * 100;
+    const strokePenalty = (strokes - 1) * 150;
+    const holeScore = Math.max(100, 1000 + timeBonus - strokePenalty);
+    score += holeScore;
+    scoreVal.textContent = score;
+
+    overlayTitle.textContent = "HOLE IN ONE/FINISHED!";
+    overlayDesc.innerHTML = `Hole completed in <b>${strokes} strokes</b>!<br>Time Remaining: <b>${timeLeft}s</b><br>Points Earned: <b>${holeScore}</b>`;
+    startBtn.textContent = "NEXT HOLE";
+    overlay.style.display = 'flex';
+    gameState = 'HOLE_COMPLETE';
+  }
+
+  function endGame(win) {
+    clearInterval(timerInterval);
+    overlayTitle.textContent = "TIME'S UP!";
+    overlayDesc.innerHTML = `You ran out of time.<br>Final Score: <b>${score}</b>`;
+    startBtn.textContent = "TRY AGAIN";
+    overlay.style.display = 'flex';
+    gameState = 'GAME_OVER';
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+
+    // Render Sky Gradient
+    const currentGroundY = groundY;
+
+    // Render Ground
+    ctx.fillStyle = '#2ed573';
+    ctx.fillRect(0, currentGroundY, worldLength, height - currentGroundY);
+
+    // Dirt detail
+    ctx.fillStyle = '#26af5f';
+    ctx.fillRect(0, currentGroundY + 15, worldLength, height - currentGroundY);
+
+    // Render Flag
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(flag.x, currentGroundY - 80, 4, 80);
+    ctx.fillStyle = '#ff4757';
+    ctx.beginPath();
+    ctx.moveTo(flag.x + 4, currentGroundY - 80);
+    ctx.lineTo(flag.x + 30, currentGroundY - 65);
+    ctx.lineTo(flag.x + 4, currentGroundY - 50);
+    ctx.fill();
+
+    // Render Hole
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.ellipse(flag.x + 2, currentGroundY + 2, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Render Player
+    ctx.fillStyle = '#ff6b81';
+    ctx.fillRect(player.x, currentGroundY - 35, 16, 35); // Body
+    ctx.fillStyle = '#ffa502';
+    ctx.beginPath();
+    ctx.arc(player.x + 8, currentGroundY - 42, 10, 0, Math.PI * 2); // Head
+    ctx.fill();
+
+    // Render Ball
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Render Aim Indicator Line
+    if (dragStart && currentDrag && gameState === 'AIMING') {
+      const dx = dragStart.x - currentDrag.x;
+      const dy = dragStart.y - currentDrag.y;
+      
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(ball.x, ball.y);
+      ctx.lineTo(ball.x + dx * 2, ball.y + dy * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+  }
+
+  function gameLoop() {
+    update();
+    render();
+    requestAnimationFrame(gameLoop);
+  }
+
+  gameLoop();
+</script>
+</body>
+</html>
